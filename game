@@ -1,0 +1,915 @@
+import sys
+import sqlite3
+from tkinter.ttk import Label
+
+from PyQt5.QtGui import QPixmap, QIcon
+from PyQt5.QtWidgets import QApplication, QWidget, QVBoxLayout, QPushButton, QLineEdit, QLabel, QMessageBox, QTextEdit, \
+    QComboBox, QListWidgetItem, QDialog, QListWidget, QHBoxLayout
+
+
+# Функции для работы с базой данных
+def init_db():
+    conn = sqlite3.connect('moba_game.db')
+    cursor = conn.cursor()
+
+# Создание таблиц, если они не существуют
+    cursor.execute('''
+CREATE TABLE IF NOT EXISTS Players (
+player_id INTEGER PRIMARY KEY AUTOINCREMENT,
+username TEXT NOT NULL,
+password TEXT,
+region TEXT,
+rank TEXT,
+joined_date DATETIME DEFAULT CURRENT_TIMESTAMP
+)
+''')
+
+    cursor.execute('''
+CREATE TABLE IF NOT EXISTS Matches (
+match_id INTEGER PRIMARY KEY AUTOINCREMENT,
+match_date DATETIME NOT NULL,
+duration INTEGER,
+winning_team TEXT
+)
+''')
+
+    cursor.execute('''
+CREATE TABLE IF NOT EXISTS Player_Match_Stats (
+stat_id INTEGER PRIMARY KEY AUTOINCREMENT,
+player_id INTEGER,
+match_id INTEGER,
+kills INTEGER,
+deaths INTEGER,
+assists INTEGER,
+gold INTEGER,
+experience INTEGER,
+FOREIGN KEY (player_id) REFERENCES Players(player_id),
+FOREIGN KEY (match_id) REFERENCES Matches(match_id)
+)
+''')
+
+    cursor.execute('''
+CREATE TABLE IF NOT EXISTS Items (
+item_id INTEGER PRIMARY KEY AUTOINCREMENT,
+item_name TEXT,
+description TEXT,
+item_type TEXT
+)
+''')
+
+    cursor.execute('''
+CREATE TABLE IF NOT EXISTS Player_Items (
+player_item_id INTEGER PRIMARY KEY AUTOINCREMENT,
+player_id INTEGER,
+match_id INTEGER,
+item_id INTEGER,
+FOREIGN KEY (player_id) REFERENCES Players(player_id),
+FOREIGN KEY (match_id) REFERENCES Matches(match_id),
+FOREIGN KEY (item_id) REFERENCES Items(item_id)
+)
+''')
+
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS Lobby(
+    lobby_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    lobby_creator INTEGER NOT NULL,
+    FOREIGN KEY (lobby_creator) REFERENCES Players(player_id)
+    )
+    """)
+
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS Lobby_players (
+    lobby_id INTEGER NOT NULL,
+    player_id INTEGER NOT NULL,
+    FOREIGN KEY (lobby_id) REFERENCES Lobby(lobby_id),
+    FOREIGN KEY (player_id) REFERENCES Players(player_id),
+    PRIMARY KEY (lobby_id, player_id)
+);""")
+
+    conn.commit()
+    conn.close()
+
+def register_user(username, password, region, rank):
+    if not user_sush(username):
+        conn = sqlite3.connect('moba_game.db')
+        cursor = conn.cursor()
+        cursor.execute('INSERT INTO Players (username, password, region, rank) VALUES (?, ?, ?, ?)', (username, password, region, rank))
+        conn.commit()
+        conn.close()
+    else:
+        print("username занят")
+
+def check_user(username, password):
+    conn = sqlite3.connect('moba_game.db')
+    cursor = conn.cursor()
+    cursor.execute('SELECT * FROM Players WHERE username = ? AND password = ?', (username, password))
+    user = cursor.fetchone()
+    conn.close()
+    return user
+
+def get_all_users():
+    conn = sqlite3.connect('moba_game.db')
+    cursor = conn.cursor()
+    cursor.execute('SELECT username, region, rank FROM Players')
+    users = cursor.fetchall()
+    conn.close()
+    return users
+
+def add_match(match_date, duration, winning_team):
+    conn = sqlite3.connect('moba_game.db')
+    cursor = conn.cursor()
+    cursor.execute('INSERT INTO Matches (match_date, duration, winning_team) VALUES (?, ?, ?)',
+    (match_date, duration, winning_team))
+    conn.commit()
+    conn.close()
+
+def add_player_stats(player_id, match_id, kills, deaths, assists, gold, experience):
+    conn = sqlite3.connect('moba_game.db')
+    cursor = conn.cursor()
+    cursor.execute('INSERT INTO Player_Match_Stats (player_id, match_id, kills, deaths, assists, gold, experience) VALUES (?, ?, ?, ?, ?, ?, ?)',
+    (player_id, match_id, kills, deaths, assists, gold, experience))
+    conn.commit()
+    conn.close()
+
+def add_item(item_name, description, item_type):
+    conn = sqlite3.connect('moba_game.db')
+    cursor = conn.cursor()
+    cursor.execute('INSERT INTO Items (item_name, description, item_type) VALUES (?, ?, ?)',
+    (item_name, description, item_type))
+    conn.commit()
+    conn.close()
+
+def get_all_items():
+    conn = sqlite3.connect('moba_game.db')
+    cursor = conn.cursor()
+    cursor.execute('SELECT item_name, description FROM Items')
+    items = cursor.fetchall()
+    conn.close()
+    return items
+
+def user_sush(username):
+    conn = sqlite3.connect('moba_game.db')
+    cursor = conn.cursor()
+    cursor.execute('SELECT * FROM Players WHERE username = ?', (username,))
+    item = cursor.fetchone()
+    conn.close()
+    return item
+
+def delete_user(username):
+    conn = sqlite3.connect('moba_game.db')
+    cursor = conn.cursor()
+    cursor.execute('DELETE FROM Players WHERE username = ?', (username,))
+    conn.commit()
+    conn.close()
+
+# Окно регистрации
+class RegistrationWindow(QWidget):
+    def __init__(self):
+        super().__init__()
+        self.setWindowTitle('Регистрация')
+        self.setGeometry(100, 100, 300, 200)
+
+        layout = QVBoxLayout()
+
+        self.username_input = QLineEdit(self)
+        self.username_input.setPlaceholderText('Имя пользователя')
+        self.username_input.setStyleSheet("""
+            QLineEdit {
+                font-size: 14px;
+                color: darkgreen;
+                background-color: lightgray;
+                border: 2px solid black;
+                border-radius: 5px;
+                padding: 5px;
+            }
+            QLineEdit:focus {
+                border: 2px solid white;
+            }
+        """)
+        layout.addWidget(self.username_input)
+
+        self.password_input = QLineEdit(self)
+        self.password_input.setPlaceholderText('Пароль')
+        self.password_input.setStyleSheet("""
+            QLineEdit {
+                font-size: 14px;
+                color: darkgreen;
+                background-color: lightgray;
+                border: 2px solid black;
+                border-radius: 5px;
+                padding: 5px;
+            }
+            QLineEdit:focus {
+                border: 2px solid white;
+            }
+        """)
+        self.password_input.setEchoMode(QLineEdit.Password)
+        layout.addWidget(self.password_input)
+
+        self.region_input = QLineEdit(self)
+        self.region_input.setPlaceholderText('Регион')
+        self.region_input.setStyleSheet("""
+            QLineEdit {
+                font-size: 14px;
+                color: darkgreen;
+                background-color: lightgray;
+                border: 2px solid black;
+                border-radius: 5px;
+                padding: 5px;
+            }
+            QLineEdit:focus {
+                border: 2px solid white;
+            }
+        """)
+        layout.addWidget(self.region_input)
+
+        self.rank_input = QLineEdit(self)
+        self.rank_input.setPlaceholderText('Ранг')
+        self.rank_input.setStyleSheet("""
+            QLineEdit {
+                font-size: 14px;
+                color: darkgreen;
+                background-color: lightgray;
+                border: 2px solid black;
+                border-radius: 5px;
+                padding: 5px;
+            }
+            QLineEdit:focus {
+                border: 2px solid white;
+            }
+        """)
+        layout.addWidget(self.rank_input)
+
+        self.register_button = QPushButton('Зарегистрироваться', self)
+        self.register_button.clicked.connect(self.register)
+        layout.addWidget(self.register_button)
+        self.register_button.setStyleSheet("""
+            QPushButton {
+                background-color: gray;
+                color: white;
+                padding: 10px;
+                border: none;
+                border-radius: 5px;
+            }
+            QPushButton:hover {
+                background-color: green;
+            }
+            QPushButton:pressed {
+                background-color: darkgreen;
+            }
+        """)
+
+
+        self.setLayout(layout)
+
+    def register(self):
+        username = self.username_input.text()
+        password = self.password_input.text()
+        region = self.region_input.text()
+        rank = self.rank_input.text()
+
+        if not username or not region or not rank or not password:
+            QMessageBox.warning(self, 'Ошибка', 'Пожалуйста, заполните все поля.')
+            return
+
+        register_user(username, password, region, rank)
+        QMessageBox.information(self, 'Успех', 'Регистрация прошла успешно!')
+
+# Окно авторизации
+class LoginWindow(QWidget):
+    def __init__(self):
+        super().__init__()
+        self.setWindowTitle('Авторизация')
+        self.setGeometry(100, 100, 300, 200)
+
+        layout = QVBoxLayout()
+
+        self.username_input = QLineEdit(self)
+        self.username_input.setPlaceholderText('Имя пользователя')
+        self.username_input.setStyleSheet("""
+            QLineEdit {
+                font-size: 14px;
+                color: darkgreen;
+                background-color: lightgray;
+                border: 2px solid black;
+                border-radius: 5px;
+                padding: 5px;
+            }
+            QLineEdit:focus {
+                border: 2px solid white;
+            }
+        """)
+        layout.addWidget(self.username_input)
+
+        self.password_input = QLineEdit(self)
+        self.password_input.setPlaceholderText('Пароль')
+        self.password_input.setStyleSheet("""
+            QLineEdit {
+                font-size: 14px;
+                color: darkgreen;
+                background-color: lightgray;
+                border: 2px solid black;
+                border-radius: 5px;
+                padding: 5px;
+            }
+            QLineEdit:focus {
+                border: 2px solid white;
+            }
+        """)
+
+        self.password_input.setEchoMode(QLineEdit.Password)
+        layout.addWidget(self.password_input)
+
+        self.role = QComboBox(self)
+        self.role.setStyleSheet("""
+            QComboBox {
+                font-size: 16px;
+                color: darkgreen;
+                background-color: lightgray;
+                border: 2px solid gray;
+                border-radius: 5px;
+                padding: 5px;
+            }
+            QComboBox::drop-down {
+                border: none; /* Убираем рамку у стрелочки */
+            }
+            QComboBox::down-arrow {
+                image: url(down_arrow.png); /* Замените на путь к вашей стрелке, если необходимо */
+            }
+        """)
+        self.role.addItem("Админ")
+        self.role.addItem("Пользователь")
+        layout.addWidget(self.role)
+
+        self.login_button = QPushButton('Войти', self)
+        self.login_button.clicked.connect(self.login)
+        pm = QIcon('Icons8-Windows-8-User-Interface-Login.32.png')
+        self.login_button.setIcon(pm)
+        self.login_button.setStyleSheet("""
+            QPushButton {
+                background-color: gray;
+                color: white;
+                padding: 10px;
+                border: none;
+                border-radius: 5px;
+            }
+            QPushButton:hover {
+                background-color: green;
+            }
+            QPushButton:pressed {
+                background-color: darkgreen;
+            }
+        """)
+
+        layout.addWidget(self.login_button)
+
+        self.reg_button = QPushButton('Зарегистроваться', self)
+        self.reg_button.clicked.connect(self.open_reg_window)
+        pm1 = QIcon('Paomedia-Small-N-Flat-Sign-add.32.png')
+        self.reg_button.setIcon(pm1)
+        self.reg_button.setStyleSheet("""
+            QPushButton {
+                background-color: gray;
+                color: white;
+                padding: 10px;
+                border: none;
+                border-radius: 5px;
+            }
+            QPushButton:hover {
+                background-color: green;
+            }
+            QPushButton:pressed {
+                background-color: darkgreen;
+            }
+        """)
+
+        layout.addWidget(self.reg_button)
+
+        self.setLayout(layout)
+
+    def login(self):
+        if self.role.currentText() == "Пользователь":
+            username = self.username_input.text()
+            password = self.password_input.text()
+            user = check_user(username, password)
+
+            if user:
+                QMessageBox.information(self, 'Успех', 'Авторизация прошла успешно!')
+                self.open_game_window(user[0]) # Передаем player_id
+            else:
+                QMessageBox.warning(self, 'Ошибка', 'Пользователь не найден.')
+        else:
+            self.admin_window = AdminWindow()
+            self.admin_window.show()
+            self.close()
+
+    def open_game_window(self, player_id):
+        self.game_window = GameWindow(player_id)
+        self.game_window.show()
+        self.close()
+
+    def open_reg_window(self):
+        self.reg_window = RegistrationWindow()
+        self.reg_window.show()
+
+class Lobby(QWidget):
+    def __init__(self, player_id): # Добавили player_id для идентификации игрока
+        super().__init__()
+        self.player_id = player_id
+        self.setWindowTitle("Лобби")
+        self.conn = sqlite3.connect('moba_game.db') # Подключение к БД
+        self.cursor = self.conn.cursor()
+        self.initUI()
+
+    def initUI(self):
+        self.setFixedSize(400, 400)
+        layout = QVBoxLayout()
+        list_layout = QHBoxLayout()
+
+        lobby_list_layout = QVBoxLayout()
+        lobby_label = QLabel("Лобби")
+        lobby_list_layout.addWidget(lobby_label)
+
+        self.lobby_list = QTextEdit(self)
+        self.lobby_list.setReadOnly(True)
+        lobby_list_layout.addWidget(self.lobby_list)
+        list_layout.addLayout(lobby_list_layout)
+
+        players_list_layout = QVBoxLayout()
+        players_label = QLabel("Игроки")
+        players_list_layout.addWidget(players_label)
+
+        self.players_list = QTextEdit(self)
+        self.players_list.setReadOnly(True)
+        players_list_layout.addWidget(self.players_list)
+
+        list_layout.addLayout(players_list_layout)
+
+        layout.addLayout(list_layout)
+
+        self.players_box = QComboBox(self)
+        self.players_box.currentIndexChanged.connect(self.update_buttons)
+        layout.addWidget(self.players_box)
+
+        self.invite_button = QPushButton("Пригласить", self)
+        pm = QIcon('Ampeross-Qetto-2-Add-contact.32.png')
+        self.invite_button.setIcon(pm)
+        self.invite_button.setStyleSheet("""
+            QPushButton {
+                background-color: gray;
+                color: white;
+                padding: 10px;
+                border: none;
+                border-radius: 5px;
+            }
+            QPushButton:hover {
+                background-color: green;
+            }
+            QPushButton:pressed {
+                background-color: darkgreen;
+            }
+        """)
+        self.invite_button.clicked.connect(self.invite)
+        self.invite_button.setEnabled(False)
+        layout.addWidget(self.invite_button)
+
+        self.kick_button = QPushButton("Кикнуть", self)
+        pm1 = QIcon('Roundicons-100-Free-Solid-Delete-user.32.png')
+        self.kick_button.setIcon(pm1)
+        self.kick_button.setStyleSheet("""
+            QPushButton {
+                background-color: gray;
+                color: white;
+                padding: 10px;
+                border: none;
+                border-radius: 5px;
+            }
+            QPushButton:hover {
+                background-color: green;
+            }
+            QPushButton:pressed {
+                background-color: darkgreen;
+            }
+        """)
+        self.kick_button.clicked.connect(self.kick)
+        self.kick_button.setEnabled(False)
+        layout.addWidget(self.kick_button)
+
+        self.quit_button = QPushButton("Выйти", self)
+        pm1 = QIcon('Hopstarter-Button-Button-Close.32.png')
+        self.quit_button.setIcon(pm1)
+        self.quit_button.setStyleSheet("""
+            QPushButton {
+                background-color: gray;
+                color: white;
+                padding: 10px;
+                border: none;
+                border-radius: 5px;
+            }
+            QPushButton:hover {
+                background-color: green;
+            }
+            QPushButton:pressed {
+                background-color: darkgreen;
+            }
+        """)
+        self.quit_button.clicked.connect(self.quit)
+        layout.addWidget(self.quit_button)
+
+        self.setLayout(layout)
+
+        self.cursor.execute("INSERT INTO Lobby (lobby_creator) VALUES (?)",
+                            (self.player_id,))
+        self.cursor.execute("SELECT lobby_id FROM Lobby WHERE lobby_creator = ?", (self.player_id,))
+        lobby_id = self.cursor.fetchone()
+        if lobby_id:
+            lobby_id = lobby_id[0]
+
+        self.cursor.execute("INSERT INTO Lobby_players (lobby_id, player_id) VALUES (?, ?)",
+                            (lobby_id, self.player_id))
+        self.conn.commit()
+
+        self.load_players()
+
+    def load_players(self):
+        try:
+            self.cursor.execute("SELECT lobby_id FROM Lobby WHERE lobby_creator = ?", (self.player_id,))
+            lobby_id = self.cursor.fetchone()
+            if lobby_id:
+                lobby_id = lobby_id[0]  # Извлекаем ID лобби
+
+                self.cursor.execute("""
+                    SELECT P.username
+                    FROM Players AS P
+                """)
+                players = [row[0] for row in self.cursor.fetchall()]
+
+                self.cursor.execute("""
+                    SELECT P.username
+                    FROM Players P
+                    JOIN Lobby_players LP ON P.player_id = LP.player_id
+                    WHERE LP.lobby_id = ?
+                """, (lobby_id,))
+
+                l_players = [row[0] for row in self.cursor.fetchall()]
+
+                self.lobby_list.setText("\n".join(l_players))
+                self.players_list.setText("\n".join(players))
+                self.players_box.clear()
+                self.players_box.addItems(players)
+
+
+            else:
+                QMessageBox.information(self, "Информация", "Вы не создали лобби")
+
+        except Exception as e:
+            QMessageBox.critical(self, "Ошибка", f"Ошибка загрузки игроков: {e}")
+
+    def invite(self):
+        selected_player = self.players_box.currentText()
+        try:
+            self.cursor.execute("SELECT player_id FROM Players WHERE username = ?", (selected_player,))
+            player_to_invite_id = self.cursor.fetchone()[0]
+            self.cursor.execute("SELECT lobby_id FROM Lobby WHERE lobby_creator = ?", (self.player_id,))
+            lobby_id = self.cursor.fetchone()[0]
+            self.cursor.execute("INSERT INTO Lobby_players (lobby_id, player_id) VALUES (?, ?)", (lobby_id, player_to_invite_id))
+            self.conn.commit()
+            self.load_players() #обновляем список после приглашения
+        except sqlite3.Error as e:
+            QMessageBox.information(self, "Ошибка", f"Игрок уже в лобби")
+
+
+    def kick(self):
+        selected_player = self.players_box.currentText()
+        try:
+            self.cursor.execute("SELECT player_id FROM Players WHERE username = ?", (selected_player,))
+            player_to_kick_id = self.cursor.fetchone()[0]
+            self.cursor.execute("SELECT lobby_id FROM Lobby WHERE lobby_creator = ?", (self.player_id,))
+            lobby_id = self.cursor.fetchone()[0]
+            self.cursor.execute("DELETE FROM Lobby_players WHERE lobby_id = ? AND player_id = ?", (lobby_id, player_to_kick_id))
+            self.conn.commit()
+            self.load_players() #обновляем список после кика
+        except sqlite3.Error as e:
+            QMessageBox.critical(self, "Ошибка", f"Ошибка исключения игрока: {e}")
+
+    def quit(self):
+        self.cursor.execute("SELECT lobby_id FROM Lobby WHERE lobby_creator = ?", (self.player_id,))
+        lobby_id = self.cursor.fetchone()
+        if lobby_id:
+            lobby_id = lobby_id[0]
+        self.cursor.execute("DELETE FROM Lobby_players WHERE lobby_id = ?",
+                            (lobby_id,))
+        self.cursor.execute("DELETE FROM Lobby WHERE lobby_id = ?",
+                            (lobby_id,))
+        self.conn.commit()
+        self.conn.close() # Закрываем соединение с базой данных
+        print("Выход из лобби")
+        self.close()
+
+    def update_buttons(self):
+        self.invite_button.setEnabled(self.players_box.currentIndex() != -1)
+        self.kick_button.setEnabled(self.players_box.currentIndex() != -1)
+
+
+    # Игровое окно
+class GameWindow(QWidget):
+    def __init__(self, player_id):
+        super().__init__()
+        self.setWindowTitle('Игровое окно')
+        self.setGeometry(100, 100, 600, 400)
+        self.player_id = player_id
+
+        layout = QVBoxLayout()
+        pm = QPixmap('6036313718.jpg')
+        label = QLabel()
+        label.setPixmap(pm)
+        layout.addWidget(label)
+
+        # Кнопки для начала матча и добавления предметов
+        self.start_game_button = QPushButton('Начать матч', self)
+        pm = QIcon('Google-Noto-Emoji-Objects-62963-crossed-swords.32.png')
+        self.start_game_button.setIcon(pm)
+        self.start_game_button.clicked.connect(self.start_game)
+        self.start_game_button.setStyleSheet("""
+            QPushButton {
+                background-color: gray;
+                color: white;
+                padding: 10px;
+                border: none;
+                border-radius: 5px;
+            }
+            QPushButton:hover {
+                background-color: green;
+            }
+            QPushButton:pressed {
+                background-color: darkgreen;
+            }
+        """)
+
+        layout.addWidget(self.start_game_button)
+
+        self.itemDict = dict()
+        self.itemBox = QComboBox(self)
+        layout.addWidget(self.itemBox)
+
+        itemarray = ["Страж Шивы", "Сердце Тарраска", "Скипетр Аганима", "Божественная Рапира", "Глаз Скади"]
+
+        for i in itemarray:
+            self.itemDict[i] = list([f"Описание {i}", f"Тип {i}"])
+            self.itemBox.addItem(i)
+
+        self.add_item_button = QPushButton('Добавить предмет', self)
+        pm1 = QIcon('Paomedia-Small-N-Flat-Sign-add.32.png')
+        self.add_item_button.setIcon(pm1)
+        self.add_item_button.clicked.connect(self.add_item)
+        self.add_item_button.setStyleSheet("""
+            QPushButton {
+                background-color: gray;
+                color: white;
+                padding: 10px;
+                border: none;
+                border-radius: 5px;
+            }
+            QPushButton:hover {
+                background-color: green;
+            }
+            QPushButton:pressed {
+                background-color: darkgreen;
+            }
+        """)
+
+        layout.addWidget(self.add_item_button)
+        self.setLayout(layout)
+
+    def start_game(self):
+        match_date = "2023-10-10 12:00:00"
+        duration = 30  # продолжительность в минутах
+        winning_team = "A"
+        add_match(match_date, duration, winning_team)  # Ваш метод добавления матча в базу данных
+        QMessageBox.information(self, 'Матч', 'Матч начался!')
+        self.lobby = Lobby(self.player_id)
+        self.lobby.show()
+        self.close()  # Закрыть игровое окно после начала матча
+
+    def add_item(self):
+        item_name = self.itemBox.currentText()
+        description = self.itemDict[item_name][0]
+        item_type = self.itemDict[item_name][1]
+        add_item(item_name, description, item_type)  # Ваш метод добавления предмета в базу данных
+        QMessageBox.information(self, 'Предмет', 'Предмет добавлен!')
+
+    # окно подготовки к матчу
+class PreparationWindow(QDialog):
+    def __init__(self, player_name, player_id, match_id): # Добавили player_id и match_id
+        super().__init__()
+        self.setWindowTitle('Подготовка к матчу')
+        self.setGeometry(100, 100, 300, 400)
+        self.player_name = player_name
+        self.player_id = player_id
+        self.match_id = match_id # ID текущего матча
+
+        self.db_connection = sqlite3.connect('game_database.db')
+        self.cursor = self.db_connection.cursor()
+
+        layout = QVBoxLayout()
+        self.hero_label = QLabel('Выберите героя:')
+        layout.addWidget(self.hero_label)
+
+        self.hero_list = QListWidget()
+        self.load_heroes()
+        layout.addWidget(self.hero_list)
+
+        self.item_label = QLabel('Выберите предметы:')
+        layout.addWidget(self.item_label)
+
+        self.item_combo = QComboBox()
+        self.load_items()
+        layout.addWidget(self.item_combo)
+
+        self.add_item_button = QPushButton('Добавить предмет', self)
+        self.add_item_button.clicked.connect(self.add_item)
+        layout.addWidget(self.add_item_button)
+
+        self.selected_items_label = QLabel('Выбранные предметы:')
+        self.selected_items_list = QListWidget()
+        layout.addWidget(self.selected_items_label)
+        layout.addWidget(self.selected_items_list)
+
+        self.start_button = QPushButton('Начать матч', self)
+        self.start_button.clicked.connect(self.start_match)
+        layout.addWidget(self.start_button)
+
+        self.setLayout(layout)
+
+    def load_heroes(self):
+        try:
+            self.cursor.execute("SELECT id, name FROM heroes")
+            heroes = self.cursor.fetchall()
+            self.hero_dict = {hero[1]: hero[0] for hero in heroes} # словарь имя героя: id героя
+
+            for hero in heroes:
+                self.hero_list.addItem(hero[1])
+        except sqlite3.Error as e:
+            QMessageBox.critical(self, 'Ошибка', f'Ошибка при загрузке героев: {e}')
+
+    def load_items(self):
+        try:
+            self.cursor.execute("SELECT id, name FROM items")
+            items = self.cursor.fetchall()
+            self.item_dict = {item[1]: item[0] for item in items} # словарь имя предмета: id предмета
+
+            for item in items:
+                self.item_combo.addItem(item[1])
+        except sqlite3.Error as e:
+            QMessageBox.critical(self, 'Ошибка', f'Ошибка при загрузке предметов: {e}')
+
+    def add_item(self):
+        selected_item = self.item_combo.currentText()
+        if selected_item:
+            item_widget_item = QListWidgetItem(selected_item)
+            self.selected_items_list.addItem(item_widget_item)
+
+    def start_match(self):
+        selected_hero = self.hero_list.currentItem()
+        if not selected_hero:
+            QMessageBox.warning(self, 'Ошибка', 'Пожалуйста, выберите героя.')
+            return
+
+        selected_items = [self.selected_items_list.item(i).text() for i in range(self.selected_items_list.count())]
+
+        try:
+            hero_id = self.hero_dict[selected_hero.text()]
+            self.cursor.execute("INSERT INTO player_match_data (player_id, match_id, hero_id) VALUES (?, ?, ?)",
+                                (self.player_id, self.match_id, hero_id))
+            for item_name in selected_items:
+                item_id = self.item_dict[item_name]
+                self.cursor.execute("INSERT INTO player_match_items (player_id, match_id, item_id) VALUES (?, ?, ?)",
+                                    (self.player_id, self.match_id, item_id))
+            self.db_connection.commit()
+            QMessageBox.information(self, 'Начало матча',
+                                    f'Игрок {self.player_name} выбрал {selected_hero.text()} с предметами: {", ".join(selected_items)}.')
+            self.accept() # Закрываем окно после успешного сохранения
+        except sqlite3.Error as e:
+            QMessageBox.critical(self, 'Ошибка', f'Ошибка при сохранении данных: {e}')
+        except KeyError as e:
+            QMessageBox.critical(self, "Ошибка", f"Ошибка: {e} Не найден в базе данных.")
+
+    def closeEvent(self, event):
+        self.db_connection.close()
+        event.accept()
+
+
+# Окно администратора
+class AdminWindow(QWidget):
+    def __init__(self):
+        super().__init__()
+        self.setWindowTitle('Админка')
+        self.setGeometry(100, 100, 400, 300)
+        layout = QVBoxLayout()
+        self.user_list = QTextEdit(self)
+        self.user_list.setReadOnly(True)
+        layout.addWidget(self.user_list)
+
+        self.load_users_button = QPushButton('Загрузить пользователей', self)
+        pm = QIcon('Gakuseisean-Ivista-2-Misc-Download-Database.32.png')
+        self.load_users_button.setIcon(pm)
+        self.load_users_button.clicked.connect(self.load_users)
+        self.load_users_button.setStyleSheet("""
+            QPushButton {
+                background-color: gray;
+                color: white;
+                padding: 10px;
+                border: none;
+                border-radius: 5px;
+            }
+            QPushButton:hover {
+                background-color: green;
+            }
+            QPushButton:pressed {
+                background-color: darkgreen;
+            }
+        """)
+
+        layout.addWidget(self.load_users_button)
+
+        self.usersBox = QComboBox(self)
+        layout.addWidget(self.usersBox)
+        self.deleteUserBtn = QPushButton("Удалить пользователя", self)
+        pm = QIcon('Oxygen-Icons.org-Oxygen-Actions-im-kick-user.32.png')
+        self.deleteUserBtn.setIcon(pm)
+        self.deleteUserBtn.setStyleSheet("""
+            QPushButton {
+                background-color: gray;
+                color: white;
+                padding: 10px;
+                border: none;
+                border-radius: 5px;
+            }
+            QPushButton:hover {
+                background-color: green;
+            }
+            QPushButton:pressed {
+                background-color: darkgreen;
+            }
+        """)
+
+        self.deleteUserBtn.clicked.connect(self.deleteUser)
+
+        layout.addWidget(self.deleteUserBtn)
+
+
+
+        self.item_list = QTextEdit(self)
+        self.item_list.setReadOnly(True)
+        layout.addWidget(self.item_list)
+
+        self.load_items_button = QPushButton('Загрузить предметы', self)
+        pm = QIcon('Paomedia-Small-N-Flat-Sign-add.32.png')
+        self.load_items_button.setIcon(pm)
+        self.load_items_button.clicked.connect(self.load_items)
+        layout.addWidget(self.load_items_button)
+        self.load_items_button.setStyleSheet("""
+            QPushButton {
+                background-color: gray;
+                color: white;
+                padding: 10px;
+                border: none;
+                border-radius: 5px;
+            }
+            QPushButton:hover {
+                background-color: green;
+            }
+            QPushButton:pressed {
+                background-color: darkgreen;
+            }
+        """)
+
+        self.setLayout(layout)
+
+    def load_users(self):
+        self.usersBox.clear()
+        self.user_list.clear()
+        users = get_all_users()
+        users_display = ""
+        for username, region, rank in users:
+            users_display += f"Имя: {username}, Регион: {region}, Ранг: {rank}\n"
+            self.user_list.setPlainText(users_display)
+            self.usersBox.addItem(username)
+
+    def load_items(self):
+        items = get_all_items()
+        items_display = ""
+        for item_name, description in items:
+            items_display += f"Имя: {item_name}, Описание: {description}\n"
+            self.item_list.setPlainText(items_display)
+
+    def deleteUser(self):
+        delete_user(self.usersBox.currentText())
+        self.load_users()
+
+if __name__ == '__main__':
+    init_db()
+    app = QApplication(sys.argv)
+    log_window = LoginWindow()
+    log_window.show()
+    sys.exit(app.exec_())
